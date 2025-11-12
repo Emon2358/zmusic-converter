@@ -23,35 +23,47 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lhasa wget ffmpeg zip build-essential
-          
+          sudo apt-get install -y lhasa wget ffmpeg zip build-essential cmake
+
           # mdx2wav (MDX → WAV)
           git clone https://github.com/mitsuman/mdx2wav.git
           cd mdx2wav
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo cp mdx2wav /usr/local/bin/
-          cd ..
+          sudo make install
+          cd ../..
 
           # VGMPlay (VGM → WAV)
           git clone https://github.com/vgmrips/vgmplay-legacy.git
           cd vgmplay-legacy
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo cp vgmplay /usr/local/bin/
-          cd ..
+          sudo make install
+          cd ../..
 
-          # ZMUSIC player (ZMD/ZMU/MIO対応)
-          git clone https://github.com/kunihikok/zmusic.git
-          cd zmusic
+          # ZMusic (ZMD/ZMU/MIO対応)
+          git clone https://github.com/coelckers/ZMusic.git
+          cd ZMusic
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo cp zmusic /usr/local/bin/
-          cd ..
+          sudo make install
+          cd ../..
 
-          # Z-MUSIC compiler (MUC/MML → ZMD)
+          # zmsc (MUC/MML → ZMD)
           git clone https://github.com/kunihikok/zmsc.git
           cd zmsc
+          mkdir build
+          cd build
+          cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo cp zmsc /usr/local/bin/
-          cd ..
+          sudo make install
+          cd ../..
 
       - name: Download LZH file
         run: |
@@ -90,6 +102,7 @@ jobs:
 
             case "$ext" in
               mdx|MDX)
+                # mdx2wav → WAV
                 mdx2wav "$f" | ffmpeg -f s16le -ar 44100 -ac 2 -i - "output/${name}.wav"
                 ;;
               mml|MML|muc|MUC)
@@ -109,7 +122,7 @@ jobs:
                 ;;
             esac
 
-            # WAV → FLAC変換
+            # WAV → FLAC
             ffmpeg -y -i "output/${name}.wav" -vn -acodec flac "output/${name}.flac"
           done
 
