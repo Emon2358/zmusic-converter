@@ -1,0 +1,138 @@
+name: Z-Music Full Convert & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "LZHファイルのダウンロードURLを入力してください"
+        required: true
+        type: string
+      release_tag:
+        description: "リリースタグ（例: v1.0）を指定してください"
+        required: true
+        type: string
+
+jobs:
+  extract_convert_zip_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lhasa wget ffmpeg zip build-essential
+          
+          # mdx2wav (MDX → WAV)
+          git clone https://github.com/mitsuman/mdx2wav.git
+          cd mdx2wav
+          make
+          sudo cp mdx2wav /usr/local/bin/
+          cd ..
+
+          # VGMPlay (VGM → WAV)
+          git clone https://github.com/vgmrips/vgmplay-legacy.git
+          cd vgmplay-legacy
+          make
+          sudo cp vgmplay /usr/local/bin/
+          cd ..
+
+          # ZMUSIC player (ZMD/ZMU/MIO対応)
+          git clone https://github.com/kunihikok/zmusic.git
+          cd zmusic
+          make
+          sudo cp zmusic /usr/local/bin/
+          cd ..
+
+          # Z-MUSIC compiler (MUC/MML → ZMD)
+          git clone https://github.com/kunihikok/zmsc.git
+          cd zmsc
+          make
+          sudo cp zmsc /usr/local/bin/
+          cd ..
+
+      - name: Download LZH file
+        run: |
+          echo "Downloading from: ${{ github.event.inputs.url }}"
+          wget "${{ github.event.inputs.url }}" -O input.lzh
+
+      - name: Extract LZH archive
+        run: |
+          mkdir extracted
+          lha x input.lzh extracted/
+
+      - name: Find Z-Music related files
+        run: |
+          mkdir zmusic_files
+          echo "Searching for Z-Music formats..."
+          find extracted -type f \( \
+            -iname "*.mdx" -o \
+            -iname "*.mml" -o \
+            -iname "*.muc" -o \
+            -iname "*.zmd" -o \
+            -iname "*.mio" -o \
+            -iname "*.zmu" -o \
+            -iname "*.vgm" \
+          \) -exec cp {} zmusic_files/ \;
+          echo "Found $(ls zmusic_files | wc -l) files"
+
+      - name: Convert Z-Music files to FLAC
+        run: |
+          mkdir output
+          for f in zmusic_files/*; do
+            [ -e "$f" ] || continue
+            base=$(basename "$f")
+            name="${base%.*}"
+            ext="${f##*.}"
+            echo "Converting $f → ${name}.flac"
+
+            case "$ext" in
+              mdx|MDX)
+                mdx2wav "$f" | ffmpeg -f s16le -ar 44100 -ac 2 -i - "output/${name}.wav"
+                ;;
+              mml|MML|muc|MUC)
+                # MML/MUC → ZMD → WAV
+                zmsc "$f" -o "output/${name}.zmd"
+                zmusic -p "output/${name}.zmd" -w "output/${name}.wav"
+                ;;
+              zmd|ZMD|zmu|ZMU|mio|MIO)
+                zmusic -p "$f" -w "output/${name}.wav"
+                ;;
+              vgm|VGM)
+                vgmplay "$f" -o "output/${name}.wav"
+                ;;
+              *)
+                echo "Unsupported extension: $ext"
+                continue
+                ;;
+            esac
+
+            # WAV → FLAC変換
+            ffmpeg -y -i "output/${name}.wav" -vn -acodec flac "output/${name}.flac"
+          done
+
+      - name: Zip the output FLACs
+        run: |
+          cd output
+          zip -r ../zmusic_flacs_${{ github.event.inputs.release_tag }}.zip ./*.flac
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "Z-Music FLACs ${{ github.event.inputs.release_tag }}"
+          body: |
+            自動変換された Z-MUSIC 形式の音源を FLAC 化して収録しています。
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload ZIP as Release asset
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          files: zmusic_flacs_${{ github.event.inputs.release_tag }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
