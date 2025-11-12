@@ -23,46 +23,46 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lhasa wget ffmpeg zip build-essential cmake
+          sudo apt-get install -y lhasa wget ffmpeg zip build-essential cmake git
 
-          # mdx2wav (MDX → WAV)
+          # mdx2wav
           git clone https://github.com/mitsuman/mdx2wav.git
           cd mdx2wav
           mkdir build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo make install
+          MDX2WAV_BIN="$(pwd)/mdx2wav"
           cd ../..
 
-          # VGMPlay (VGM → WAV)
+          # vgmplay
           git clone https://github.com/vgmrips/vgmplay-legacy.git
           cd vgmplay-legacy
           mkdir build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo make install
+          VGMPLAY_BIN="$(pwd)/vgmplay"
           cd ../..
 
-          # ZMusic (ZMD/ZMU/MIO対応)
+          # zmusic
           git clone https://github.com/coelckers/ZMusic.git
           cd ZMusic
           mkdir build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo make install
+          ZMUSIC_BIN="$(pwd)/zmusic"
           cd ../..
 
-          # zmsc (MUC/MML → ZMD)
+          # zmsc
           git clone https://github.com/kunihikok/zmsc.git
           cd zmsc
           mkdir build
           cd build
           cmake -DCMAKE_BUILD_TYPE=Release ..
           make
-          sudo make install
+          ZMSC_BIN="$(pwd)/zmsc"
           cd ../..
 
       - name: Download LZH file
@@ -102,19 +102,17 @@ jobs:
 
             case "$ext" in
               mdx|MDX)
-                # mdx2wav → WAV
-                mdx2wav "$f" | ffmpeg -f s16le -ar 44100 -ac 2 -i - "output/${name}.wav"
+                "$MDX2WAV_BIN" "$f" | ffmpeg -f s16le -ar 44100 -ac 2 -i - "output/${name}.wav"
                 ;;
               mml|MML|muc|MUC)
-                # MML/MUC → ZMD → WAV
-                zmsc "$f" -o "output/${name}.zmd"
-                zmusic -p "output/${name}.zmd" -w "output/${name}.wav"
+                "$ZMSC_BIN" "$f" -o "output/${name}.zmd"
+                "$ZMUSIC_BIN" -p "output/${name}.zmd" -w "output/${name}.wav"
                 ;;
               zmd|ZMD|zmu|ZMU|mio|MIO)
-                zmusic -p "$f" -w "output/${name}.wav"
+                "$ZMUSIC_BIN" -p "$f" -w "output/${name}.wav"
                 ;;
               vgm|VGM)
-                vgmplay "$f" -o "output/${name}.wav"
+                "$VGMPLAY_BIN" "$f" -o "output/${name}.wav"
                 ;;
               *)
                 echo "Unsupported extension: $ext"
